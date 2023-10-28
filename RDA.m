@@ -9,12 +9,15 @@ clc; clear all; close all;
 simulation = 0;
 
 % Fast? Fase for black and white images, slow for nice colour ones
-fast = 0;
+fast = 1;
 
 % Load the 'echo.mat' data
 if simulation == 0
     load('echo.mat');
 end
+
+% How many sim point targets?
+NumberofSimTargets = 4;
 
 % Constants
 C = 2.9979e8; % Speed of Light
@@ -57,9 +60,6 @@ if simulation == 1
     Nrg = 320;        % Smaples per Range
     fc  = 0;          % Doppler centroid U: Hz
 end
-
-NumberofSimTargets = 10;
-
 
 % Calculated Values
 lambda = C / f0; % Wavelength
@@ -107,6 +107,7 @@ if simulation == 1
 
     % Generate simulated data for each target
     s_echo = zeros(Naz,Nrg);    % Used to store the generated echo data
+    s_k = zeros(Naz, Nrg, NumberofSimTargets);
     for k = 1:NumberofSimTargets
         Rn = sqrt((xs(k) .* ones(Naz,Nrg)) .^ 2 + (Vr .* taAxis - ys(k) .* ones(Naz,Nrg)) .^ 2);
         range = ((abs(trAxis - 2 .* Rn ./ C)) <= ((Tr / 2) .* ones(Naz,Nrg)));
@@ -116,13 +117,13 @@ if simulation == 1
         azimuth = (sinc(0.886 .* s ./ beta_bw)) .^ 2;
     
         % reflection of LFMW, Formula 4.32 in textbook
-        s_k(i) = range .* azimuth .* exp(-(1j * 4 * pi * f0) .* Rn ./ C) .* exp((1j * pi * Kr) .* (trAxis - 2 .* Rn ./ C) .^ 2);
+        s_k(:,:,k) = range .* azimuth .* exp(-(1j * 4 * pi * f0) .* Rn ./ C) .* exp((1j * pi * Kr) .* (trAxis - 2 .* Rn ./ C) .^ 2);
     end
-    s_echo = sum(s_k);
+    s_echo = sum(s_k,3);
     data = s_echo;
 
     % Display each simulated signal and the sum.
-    plotSimSignals(s_k);
+    plotSimSignals(s_k, NumberofSimTargets);
 else
     data = double(echo);
 end
@@ -262,18 +263,20 @@ if simulation == 0
     end
 end
 
-function plotSimSignals(d)
-    number = numel(d);
+function plotSimSignals(d, NumberofSims)
+    number = NumberofSims;
 
     %Row Major Order
     r = ceil(sqrt(number));
     c = ceil(number / r);
     figure;
     for i = 1:number
+        data = d(:,:,i);
+        data = squeeze(data);
         subplot(r,c,i)
         pcolor(abs(data));
         shading flat
-        title(string(append('A s: ', i)));
+        title(string(append('A s: ', int2str(i))));
         xlabel('Range');
         ylabel('Azimuth');
         % No colour bar
@@ -327,7 +330,7 @@ function plotData(data, speed, t)
     
         shg
     else  
-        figure; imshow(abs(data), []); title(t + ' Data (Amplitude)');
+        figure; imshow(abs(data), []); title(string(append(t, ' Data (Amplitude)')));
     end
 end
 
