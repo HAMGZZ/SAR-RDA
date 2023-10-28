@@ -1,5 +1,7 @@
 % Lewis Hamilton 28/10/2023
 % With help from Vanishka Kapoor and Michael Jae Arbotante
+%
+% An RDA implementation for point target simulation and RADARSAT echo data processing
 
 clc; clear all; close all;
 
@@ -7,7 +9,7 @@ clc; clear all; close all;
 simulation = 0;
 
 % Fast? Fase for black and white images, slow for nice colour ones
-fast = 1;
+fast = 0;
 
 % Load the 'echo.mat' data
 if simulation == 0
@@ -106,18 +108,21 @@ if simulation == 1
     % Generate simulated data for each target
     s_echo = zeros(Naz,Nrg);    % Used to store the generated echo data
     for k = 1:NumberofSimTargets
-        Rn = sqrt( (xs(k).*ones(Naz,Nrg)).^2 + (Vr.*taAxis-ys(k).*ones(Naz,Nrg)).^2 );
-        range = ((abs(trAxis-2.*Rn./C)) <= ((Tr/2).*ones(Naz,Nrg)));
+        Rn = sqrt((xs(k) .* ones(Naz,Nrg)) .^ 2 + (Vr .* taAxis - ys(k) .* ones(Naz,Nrg)) .^ 2);
+        range = ((abs(trAxis - 2 .* Rn ./ C)) <= ((Tr / 2) .* ones(Naz,Nrg)));
 
         % sinc-squared function, Formula 4.31 in textbook
-        s = atan( Vr.*(taAxis-btcs(k).*ones(Naz,Nrg))/xs(k) ); 
-        azimuth = (sinc(0.886.*s./beta_bw)).^2;
+        s = atan( Vr .* (taAxis - btcs(k) .* ones(Naz,Nrg)) / xs(k) ); 
+        azimuth = (sinc(0.886 .* s ./ beta_bw)) .^ 2;
     
-        % reflection of LFMW
-        s_k = range.*azimuth.*exp(-(1j*4*pi*f0).*Rn./C).*exp((1j*pi*Kr).*(trAxis-2.*Rn./C).^2);
-        s_echo = s_echo + s_k;  % The sum of echo signals from all point targets.
+        % reflection of LFMW, Formula 4.32 in textbook
+        s_k(i) = range .* azimuth .* exp(-(1j * 4 * pi * f0) .* Rn ./ C) .* exp((1j * pi * Kr) .* (trAxis - 2 .* Rn ./ C) .^ 2);
     end
+    s_echo = sum(s_k);
     data = s_echo;
+
+    % Display each simulated signal and the sum.
+    plotSimSignals(s_k);
 else
     data = double(echo);
 end
@@ -126,18 +131,7 @@ end
 % RDA
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Display Raw Data
-if fast == 0
-    figure; 
-    pcolor(abs(data)); 
-    shading flat
-    title('Raw Data');
-    h = colorbar;
-    ylabel(h, 'Normalized Amplitude')
-    colormap 'jet'
-    shg
-else  
-    figure; imshow(abs(data), []); title('After Range Compression');
-end
+plotData(data, fast, 'Raw');
 
 % Align data to doppler centroid
 disp("Allign to doppler")
@@ -150,18 +144,7 @@ data = fty(fty(data).*exp(1i*pi*Frg.^2/Kr));
 disp("Range Compression done")
 
 % Display Range Compressed
-if fast == 0
-    figure; 
-    pcolor(abs(data)); 
-    shading flat
-    title('Range Compressed');
-    h = colorbar;
-    ylabel(h, 'Normalized Amplitude')
-    colormap 'jet'
-    shg
-else  
-    figure; imshow(abs(data), []); title('After Range Compression');
-end
+plotData(data, fast, 'Range Compressed');
 
 % Azimuth FFT
 disp("Azimuth FFT")
@@ -169,18 +152,7 @@ data = fty(data);
 disp("Azimuth FFT done")
 
 % Display Azimuth FFT
-if fast == 0
-    figure; 
-    pcolor(abs(data)); 
-    shading flat
-    title('Azimuth FFT');
-    h = colorbar;
-    ylabel(h, 'Normalized Amplitude')
-    colormap 'jet'
-    shg
-else  
-    figure; imshow(abs(data), []); title('After Range Compression');
-end
+plotData(data, fast, 'Azimuth FFT');
 
 % RCMC
 disp("RCMC")
@@ -191,18 +163,7 @@ data = data .* G;
 disp("RCMC done")
 
 % Display RCMC
-if fast == 0
-    figure; 
-    pcolor(abs(data)); 
-    shading flat
-    title('RCMC');
-    h = colorbar;
-    ylabel(h, 'Normalized Amplitude')
-    colormap 'jet'
-    shg
-else  
-    figure; imshow(abs(data), []); title('After Range Compression');
-end
+plotData(data, fast, 'RCMC');
 
 % Azimuth compression
 disp("Azimuth compression")
@@ -212,19 +173,16 @@ H_2D = repmat(H.', [1, size(data, 2)]);  % Replicate H across the range dimensio
 data = data .* H_2D;
 disp("Azimuth compression done")
 
+% Display H filter
+figure; 
+plot(Faz,H);
+title('H Filter');
+shg
+
+plotData(H_2D, fast, 'H Filter Matrix');
+
 % Display after Azimuth Compression
-if fast == 0
-    figure; 
-    pcolor(abs(data)); 
-    shading flat
-    title('Azimuth Compressed');
-    h = colorbar;
-    ylabel(h, 'Normalized Amplitude')
-    colormap 'jet'
-    shg
-else  
-    figure; imshow(abs(data), []); title('After Range Compression');
-end
+plotData(data, fast, 'Azimuth Compression');
 
 % Inverse FFT to get the image
 disp("Final FFT")
@@ -240,13 +198,13 @@ if fast == 0
     figure; 
     pcolor(SARImage); 
     shading flat
-    title('RAW SAR Image');
+    title('Final Raw (unedited) SAR Image');
     h = colorbar;
     ylabel(h, 'Normalized Amplitude')
     colormap 'jet'
     shg
 else  
-    figure; imshow(abs(SARImage), []); title('After Range Compression');
+    figure; imshow(abs(SARImage), []); title('Final Raw (unedited) SAR Image');
 end
 
 % Image processing
@@ -301,6 +259,75 @@ if simulation == 0
         shg
     else  
         figure; imshow(abs(SARImageSpek), []); title('Speckle Filter');
+    end
+end
+
+function plotSimSignals(d)
+    number = numel(d);
+
+    %Row Major Order
+    r = ceil(sqrt(number));
+    c = ceil(number / r);
+    figure;
+    for i = 1:number
+        subplot(r,c,i)
+        pcolor(abs(data));
+        shading flat
+        title(string(append('A s: ', i)));
+        xlabel('Range');
+        ylabel('Azimuth');
+        % No colour bar
+        colormap 'jet'
+    end
+    shg
+end
+
+function plotData(data, speed, t)
+    if speed == 0
+        figure; 
+        subplot(2,2,1)
+        pcolor(real(data)); 
+        shading flat
+        title(string(append('Real ', t, ' Data')));
+        xlabel('Range');
+        ylabel('Azimuth');
+        h = colorbar;
+        ylabel(h, 'Normalized Amplitude')
+        colormap 'jet'
+    
+        subplot(2,2,2)
+        pcolor(imag(data)); 
+        shading flat
+        title(append('Imaginary ', t, ' Data'));
+        xlabel('Range');
+        ylabel('Azimuth');
+        h = colorbar;
+        ylabel(h, 'Normalized Amplitude')
+        colormap 'jet'
+    
+        subplot(2,2,3)
+        pcolor(abs(data)); 
+        shading flat
+        title(append('Amplitude of ', t, ' Data'));
+        xlabel('Range');
+        ylabel('Azimuth');
+        h = colorbar;
+        ylabel(h, 'Normalized Amplitude')
+        colormap 'jet'
+    
+        subplot(2,2,4)
+        pcolor(angle(data)); 
+        shading flat
+        title(append('Phase of ', t, ' Data'));
+        xlabel('Range');
+        ylabel('Azimuth');
+        h = colorbar;
+        ylabel(h, 'Normalized Amplitude')
+        colormap 'jet'
+    
+        shg
+    else  
+        figure; imshow(abs(data), []); title(t + ' Data (Amplitude)');
     end
 end
 
