@@ -229,8 +229,8 @@ if simulation == 0
 
     % Circshift
     disp("image shift")
-    SARImageShifted = circshift(SARImageEdit, 800);
-    SARImageShifted = circshift(SARImageShifted, 900, 2);
+    SARImageShifted = circshift(SARImageEdit, 400);
+    SARImageShifted = circshift(SARImageShifted, 400, 2);
     disp("image shift done")
     if fast == 0
         figure; 
