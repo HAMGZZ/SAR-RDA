@@ -6,7 +6,7 @@
 clc; clear all; close all;
 
 % Simulation? 1 for sim, 0 for RADARSAT
-simulation = 0;
+simulation = 1;
 
 % Fast? Fase for black and white images, slow for nice colour ones
 fast = 1;
@@ -106,7 +106,6 @@ if simulation == 1
     taAxis = s_ta.'*ones(1,Nrg);
 
     % Generate simulated data for each target
-    s_echo = zeros(Naz,Nrg);    % Used to store the generated echo data
     s_k = zeros(Naz, Nrg, NumberofSimTargets);
     for k = 1:NumberofSimTargets
         Rn = sqrt((xs(k) .* ones(Naz,Nrg)) .^ 2 + (Vr .* taAxis - ys(k) .* ones(Naz,Nrg)) .^ 2);
@@ -119,8 +118,9 @@ if simulation == 1
         % reflection of LFMW, Formula 4.32 in textbook
         s_k(:,:,k) = range .* azimuth .* exp(-(1j * 4 * pi * f0) .* Rn ./ C) .* exp((1j * pi * Kr) .* (trAxis - 2 .* Rn ./ C) .^ 2);
     end
-    s_echo = sum(s_k,3);
-    data = s_echo;
+
+    % Load the simlatued point target data into the data matrix for RDA
+    data = sum(s_k, 3);
 
     % Display each simulated signal and the sum.
     plotSimSignals(s_k, NumberofSimTargets);
