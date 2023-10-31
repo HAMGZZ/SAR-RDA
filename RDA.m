@@ -6,7 +6,7 @@
 clc; clear all; close all;
 
 % Simulation? 1 for sim, 0 for RADARSAT
-simulation = 1;
+simulation = 0;
 
 % Fast? Fase for black and white images, slow for nice colour ones
 fast = 1;
@@ -17,7 +17,7 @@ if simulation == 0
 end
 
 % How many sim point targets?
-NumberofSimTargets = 4;
+NumberofSimTargets = 3;
 
 % Constants
 C = 2.9979e8; % Speed of Light
@@ -37,7 +37,7 @@ fc  = 0 ; % Doppler centroid U: Hz
 if simulation == 0
     R0  = 988647.462; % Center Slant Range U: m
     Vr  = 7062;       % Radar Velocity U: m/s
-    Tr  = 41.75e-6;   % Pulse Duration U: s
+    Tr  = 41.74e-6;   % Pulse Duration U: s
     Kr  = -0.72135e12;% Pulse Rate U: Hz/s
     f0  = 5.3e9;      % Carrier (radar) Frequency U: Hz
     Fr  = 32.317e6;   % Smapling Rate U: Hz
@@ -64,7 +64,7 @@ end
 % Calculated Values
 lambda = C / f0; % Wavelength
 t0 = 2 * R0 / C;  % Starting time of the data window
-
+:
 % Freq and Time Axis
 tr = t0 + (Nrg-1) / Fr;
 Frg = ((0:Nrg-1) - Nrg/2) / Nrg * Fr;
@@ -93,30 +93,29 @@ if simulation == 1
     end
 
     % if it should be made more accurate in terms of physical antenna size
-    La_real = 1; % Antenna length in azimuth
-    beta_bw = 0.886*lambda/La_real; % Radar 3dB beamwidth
-    La = beta_bw*R0;        % Synthetic Aperture Length
+    La_real = 8; % Antenna length in azimuth
+    bBandwidth = 0.886 * lambda / La_real; % Radar 3dB beamwidth
 
     % simulation freq and time Axis
     s_tr = 2 * x(1) / C + (-Nrg / 2 : (Nrg / 2 - 1)) / Fr;
     s_ta = (-Naz / 2 : Naz / 2 - 1) / Fa;
 
     % Generate azimuth and frequency matrix.
-    trAxis = ones(Naz,1)*s_tr;
-    taAxis = s_ta.'*ones(1,Nrg);
+    trAxis = ones(Naz,1) * s_tr;
+    taAxis = s_ta.' * ones(1,Nrg);
 
     % Generate simulated data for each target
     s_k = zeros(Naz, Nrg, NumberofSimTargets);
     for k = 1:NumberofSimTargets
         Rn = sqrt((xs(k) .* ones(Naz,Nrg)) .^ 2 + (Vr .* taAxis - ys(k) .* ones(Naz,Nrg)) .^ 2);
-        range = ((abs(trAxis - 2 .* Rn ./ C)) <= ((Tr / 2) .* ones(Naz,Nrg)));
+        inSwath = ((abs(trAxis - 2 .* Rn ./ C)) <= ((Tr / 2) .* ones(Naz,Nrg)));
 
         % sinc-squared function, Formula 4.31 in textbook
-        s = atan( Vr .* (taAxis - btcs(k) .* ones(Naz,Nrg)) / xs(k) ); 
-        azimuth = (sinc(0.886 .* s ./ beta_bw)) .^ 2;
+        s = atan(Vr .* (taAxis - btcs(k) .* ones(Naz,Nrg)) / xs(k)); 
+        azimuth = (sinc(0.886 .* s ./ bBandwidth)) .^ 2;
     
         % reflection of LFMW, Formula 4.32 in textbook
-        s_k(:,:,k) = range .* azimuth .* exp(-(1j * 4 * pi * f0) .* Rn ./ C) .* exp((1j * pi * Kr) .* (trAxis - 2 .* Rn ./ C) .^ 2);
+        s_k(:,:,k) = inSwath .* azimuth .* exp(-(1j * 4 * pi * f0) .* Rn ./ C) .* exp((1j * pi * Kr) .* (trAxis - 2 .* Rn ./ C) .^ 2);
     end
 
     % Load the simlatued point target data into the data matrix for RDA
@@ -136,12 +135,13 @@ plotData(data, fast, 'Raw');
 
 % Align data to doppler centroid
 disp("Allign to doppler")
-data = data .* exp(-1i * 2 * pi * fc * (ta' * ones(1, Nrg)));
+data = data .* exp(-1j * 2 * pi * fc * (ta' * ones(1, Nrg)));
 disp("Allign to doppler done")
 
 % Range compression
 disp("Range Compression")
-data = fty(fty(data).*exp(1i*pi*Frg.^2/Kr));
+GFilter = exp(1j * pi * ((Frg.^2) / Kr));
+data = ifty(fty(data) .* GFilter);
 disp("Range Compression done")
 
 % Display Range Compressed
@@ -149,7 +149,7 @@ plotData(data, fast, 'Range Compressed');
 
 % Azimuth FFT
 disp("Azimuth FFT")
-data = fty(data);
+data = ftx(data);
 disp("Azimuth FFT done")
 
 % Display Azimuth FFT
@@ -159,7 +159,7 @@ plotData(data, fast, 'Azimuth FFT');
 disp("RCMC")
 dR = lambda^2 * R0 .* Faz.^2 / (8 * Vr^2);
 [Frg_2D, dR2D] = meshgrid(Frg, dR);
-G = exp(1i * 4 * pi * Frg_2D .* dR2D / C);
+G = exp(1j * 4 * pi * Frg_2D .* dR2D / C);
 data = data .* G;
 disp("RCMC done")
 
@@ -169,7 +169,7 @@ plotData(data, fast, 'RCMC');
 % Azimuth compression
 disp("Azimuth compression")
 Ka = 2 * Vr^2 / lambda / R0;
-H = exp(-1i * pi * Faz.^2 ./ Ka);
+H = exp(-1j * pi * Faz.^2 ./ Ka);
 H_2D = repmat(H.', [1, size(data, 2)]);  % Replicate H across the range dimension
 data = data .* H_2D;
 disp("Azimuth compression done")
@@ -212,7 +212,7 @@ end
 if simulation == 0
     % Constrast increase
     disp("Image contrast increase")
-    SARImageEdit = imadjust(SARImage);
+    SARImageEdit = imadjust(SARImage, [0.00015 0.06]);
     disp("Image contrast increase done")
     if fast == 0
         figure; 
@@ -224,13 +224,13 @@ if simulation == 0
         colormap 'jet'
         shg
     else  
-        figure; imshow(abs(SARImageEdit), []); title('After Range Compression');
+        figure; imshow(abs(SARImageEdit), []); title('Constrast Increased');
     end
 
     % Circshift
     disp("image shift")
-    SARImageShifted = circshift(SARImageEdit, 400);
-    SARImageShifted = circshift(SARImageShifted, 400, 2);
+    SARImageShifted = circshift(SARImageEdit, -295, 1);
+    SARImageShifted = circshift(SARImageShifted, -580, 2);
     disp("image shift done")
     if fast == 0
         figure; 
@@ -247,7 +247,7 @@ if simulation == 0
 
     % Despekle
     disp("image despeckle")
-    SARImageSpek = specklefilt(SARImageShifted,DegreeOfSmoothing=0.4,NumIterations=20);
+    SARImageSpek = specklefilt(SARImageShifted,DegreeOfSmoothing=0.2,NumIterations=50);
     disp("image despeckle done")
     if fast == 0
         figure; 
@@ -345,4 +345,8 @@ end
    
 function s=iftx(fs)
     s=fftshift(ifft(fftshift(fs)));
+end
+
+function fs=ifty(fs)
+    fs=fftshift(ifft(fftshift(fs.'))).';
 end
